@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: harbor.onwalk.net/pts/rust-axum-demo
+  repository: artifact.onwalk.net/k8s/rust-demo 
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"

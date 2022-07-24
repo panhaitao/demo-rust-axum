@@ -1,3 +1,9 @@
+image:
+  name: artifact.onwalk.net/k8s/ci-runner:v3.6.1 
+  entrypoint:
+    - '/usr/bin/env'
+    - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
 stages:
   - build-image
   - build-chart
@@ -5,33 +11,34 @@ stages:
 
 image-job:
   stage: build-image
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_DRIVER: overlay2
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
   script:
-    - docker build --network host -t $CI_PROJECT_NAME:$CI_PIPELINE_ID .
-    - docker login -u admin -p gMaxyOl3fU harbor.onwalk.net/pts
-    - docker tag $CI_PROJECT_NAME:$CI_PIPELINE_ID harbor.onwalk.net/pts/$CI_PROJECT_NAME:$CI_PIPELINE_ID
-    - docker push harbor.onwalk.net/pts/$CI_PROJECT_NAME:$CI_PIPELINE_ID
-    - docker tag $CI_PROJECT_NAME:$CI_PIPELINE_ID harbor.onwalk.net/pts/$CI_PROJECT_NAME:latest
-    - docker push harbor.onwalk.net/pts/$CI_PROJECT_NAME:latest
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"artifact.onwalk.net/k8s\":{\"auth\":\"$(printf "%s:%s" "admin" "L@bs&d1250" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - >-
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "artifact.onwalk.net/k8s/rust-demo:latest"
+  rules:
+    - if: $CI_COMMIT_TAG
 
 chart-job:
   stage: build-chart
   variables:
     HELM_EXPERIMENTAL_OCI: 1
   script:
-    - helm registry login -u admin -p gMaxyOl3fU harbor.onwalk.net/charts
-    - helm chart save chart/ harbor.onwalk.net/charts/$CI_PROJECT_NAME
-    - helm chart push harbor.onwalk.net/charts/$CI_PROJECT_NAME:0.1.1
+    - helm repo add sync -u admin -p 'L@bs&d1250' https://artifact.onwalk.net/chartrepo/k8s 
+    - helm package chart/
+    - helm cm-push rust-axum-demo-0.1.1.tgz sync
 
 deploy-job:
   stage: deploy
   variables:
     HELM_EXPERIMENTAL_OCI: 1
   script:
-    - mkdir -pv /chart/
-    - helm chart pull harbor.onwalk.net/charts/rust-axum-demo:0.1.1 
-    - helm chart export harbor.onwalk.net/charts/rust-axum-demo:0.1.1 -d /chart/
-    - helm --kubeconfig /root/.kube/config upgrade --install rust-axum-demo /chart/rust-axum-demo/
+    - helm repo add stable https://artifact.onwalk.net/chartrepo/k8s
+    - helm repo up
+    - helm --kubeconfig /root/.kube/config upgrade --install rust-axum-demo  stable/rust-axum-demo
